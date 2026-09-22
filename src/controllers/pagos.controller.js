@@ -5,14 +5,12 @@ function getMP() {
   return new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
 }
 
-// POST /api/pagos/preference
-// Recibe un pedido_id, crea la preference en MP y devuelve el init_point
+// POST /api/pagos/preference  — checkout online
 export async function createPreference(req, res) {
   const { pedido_id } = req.body;
   if (!pedido_id) return res.status(400).json({ error: 'pedido_id requerido' });
 
   try {
-    // Traer pedido con items
     const { rows } = await pool.query(`
       SELECT p.*, json_agg(json_build_object(
         'nombre', pi.nombre, 'cantidad', pi.cantidad, 'precio_unit', pi.precio_unit
@@ -43,13 +41,12 @@ export async function createPreference(req, res) {
           failure: `${process.env.FRONTEND_URL}/pago/error`,
           pending: `${process.env.FRONTEND_URL}/pago/pendiente`,
         },
-        auto_return:        'approved',
-        notification_url:   `${process.env.API_URL}/api/pagos/webhook`,
+        auto_return:          'approved',
+        notification_url:     `${process.env.API_URL}/api/pagos/webhook`,
         statement_descriptor: 'BURGER MUST',
       },
     });
 
-    // Guardar preference_id en el pedido
     await pool.query(
       'UPDATE pedidos SET mp_preference_id = $1 WHERE id = $2',
       [response.id, pedido_id]
@@ -63,41 +60,95 @@ export async function createPreference(req, res) {
 }
 
 // POST /api/pagos/webhook
-// MercadoPago notifica acá cuando cambia el estado de un pago
+// Recibe notificaciones de MP para pagos online Y cobros con Point.
 export async function webhook(req, res) {
-  // Responder 200 inmediatamente para que MP no reintente
-  res.sendStatus(200);
+  res.sendStatus(200);  // responder inmediatamente para que MP no reintente
 
-  const { type, data } = req.body;
-  if (type !== 'payment') return;
+  const { type, data, action } = req.body;
 
-  try {
-    const paymentClient = new Payment(getMP());
-    const payment = await paymentClient.get({ id: data.id });
+  // ── Pago online (Checkout Pro) ──────────────────────────────────────────
+  if (type === 'payment') {
+    try {
+      const paymentClient = new Payment(getMP());
+      const payment = await paymentClient.get({ id: data.id });
+      const pedido_id = Number(payment.external_reference);
+      if (!pedido_id) return;
 
-    const pedido_id = Number(payment.external_reference);
-    if (!pedido_id) return;
+      const mp_status = payment.status;
+      // Solo mover a cocina si el pago está aprobado
+      // y el pedido sigue en pendiente_caja (evitar doble procesamiento)
+      const nuevoEstado =
+        mp_status === 'approved' ? 'nuevo' :
+        mp_status === 'rejected' ? 'cancelado' : null;
 
-    const mp_status = payment.status; // approved | pending | rejected
-
-    const nuevoEstado = mp_status === 'approved'
-      ? 'nuevo'           // pago aprobado → pasa a cocina
-      : mp_status === 'rejected'
-        ? 'cancelado'
-        : null;           // pending: no tocar
-
-    if (nuevoEstado) {
-      await pool.query(
-        'UPDATE pedidos SET mp_payment_id = $1, mp_status = $2, estado = $3 WHERE id = $4',
-        [String(payment.id), mp_status, nuevoEstado, pedido_id]
-      );
-    } else {
-      await pool.query(
-        'UPDATE pedidos SET mp_payment_id = $1, mp_status = $2 WHERE id = $3',
-        [String(payment.id), mp_status, pedido_id]
-      );
+      if (nuevoEstado) {
+        await pool.query(
+          `UPDATE pedidos
+           SET mp_payment_id = $1, mp_status = $2, estado = $3,
+               mp_point_intent_id = NULL
+           WHERE id = $4 AND estado = 'pendiente_caja'`,
+          [String(payment.id), mp_status, nuevoEstado, pedido_id]
+        );
+      } else {
+        await pool.query(
+          'UPDATE pedidos SET mp_payment_id = $1, mp_status = $2 WHERE id = $3',
+          [String(payment.id), mp_status, pedido_id]
+        );
+      }
+    } catch (err) {
+      console.error('[webhook/payment]', err.message);
     }
-  } catch (err) {
-    console.error('[pagos/webhook]', err.message);
+    return;
+  }
+
+  // ── Point Plus: resultado de un intent ─────────────────────────────────
+  // MP envía action = "point_integration_api" o type = "point_integration_wh"
+  if (type === 'point_integration_wh' || action === 'point_integration_api') {
+    try {
+      const intentData = data ?? req.body;
+
+      // El intent trae payment_id cuando está aprobado
+      const paymentId  = intentData.payment_id;
+      const intentId   = intentData.id;
+      const status     = intentData.state;   // FINISHED | CANCELED | ERROR
+
+      if (!intentId) return;
+
+      // Buscar el pedido por intent_id
+      const { rows } = await pool.query(
+        'SELECT id FROM pedidos WHERE mp_point_intent_id = $1', [intentId]
+      );
+      const pedido = rows[0];
+      if (!pedido) return;
+
+      if (status === 'FINISHED' && paymentId) {
+        // Verificar el pago real con la API de pagos
+        const paymentClient = new Payment(getMP());
+        const payment = await paymentClient.get({ id: paymentId });
+        const mp_status = payment.status;
+
+        const nuevoEstado =
+          mp_status === 'approved' ? 'nuevo' :
+          mp_status === 'rejected' ? 'cancelado' : null;
+
+        await pool.query(
+          `UPDATE pedidos
+           SET mp_payment_id = $1, mp_status = $2,
+               ${nuevoEstado ? "estado = '" + nuevoEstado + "'," : ""}
+               mp_point_intent_id = NULL
+           WHERE id = $3`,
+          [String(paymentId), mp_status, pedido.id]
+        );
+      } else if (status === 'CANCELED' || status === 'ERROR') {
+        await pool.query(
+          `UPDATE pedidos
+           SET mp_status = $1, mp_point_intent_id = NULL
+           WHERE id = $2`,
+          [status.toLowerCase(), pedido.id]
+        );
+      }
+    } catch (err) {
+      console.error('[webhook/point]', err.message);
+    }
   }
 }

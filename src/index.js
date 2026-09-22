@@ -9,6 +9,7 @@ import pagosRoutes    from './routes/pagos.routes.js';
 import finanzasRoutes from './routes/finanzas.routes.js';
 import cajaRoutes     from './routes/caja.routes.js';
 import stockRoutes    from './routes/stock.routes.js';
+import pointRoutes    from './routes/point.routes.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -37,6 +38,7 @@ app.use('/api/pagos',    pagosRoutes);
 app.use('/api/finanzas', finanzasRoutes);
 app.use('/api/caja',     cajaRoutes);
 app.use('/api/stock',    stockRoutes);
+app.use('/api/point',    pointRoutes);
 
 // ── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_, res) => res.status(404).json({ error: 'Ruta no encontrada' }));

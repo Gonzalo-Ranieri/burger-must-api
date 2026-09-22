@@ -209,3 +209,18 @@ SELECT id, nombre, unidad, stock_actual, stock_minimo,
 FROM insumos
 WHERE activo = true AND stock_actual < stock_minimo
 ORDER BY faltante DESC;
+
+-- ── POSNET / POINT ─────────────────────────────────────────────────────────
+-- Agregar modo_pago "posnet" al check existente
+ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_modo_pago_check;
+ALTER TABLE pedidos ADD CONSTRAINT pedidos_modo_pago_check
+  CHECK (modo_pago IN ('efectivo','online','posnet'));
+
+-- Columna para el intent_id del Point (para consultar estado y cancelar)
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_point_intent_id TEXT;
+
+-- ── AJUSTE DE ESTADOS ───────────────────────────────────────────────────────
+-- Agregar "pendiente_caja" como estado inicial para pagos presenciales
+ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_estado_check;
+ALTER TABLE pedidos ADD CONSTRAINT pedidos_estado_check
+  CHECK (estado IN ('pendiente_caja','nuevo','en preparación','listo','entregado','cancelado'));
