@@ -1,5 +1,4 @@
 import pool from '../db/pool.js';
-import bistrosoft from '../services/bistrosoft.js';
 
 function generarNumero() {
   return `#${String(Math.floor(Math.random() * 9000) + 1000)}`;
@@ -66,10 +65,6 @@ export async function createPedido(req, res) {
     }
 
     await client.query('COMMIT');
-
-    // Enviar a Bistrosoft en background (no bloquea la respuesta al cliente)
-    bistrosoft.enviarPedido({ ...pedido, items: itemsValidos }).catch(() => {});
-
     res.status(201).json({ ...pedido, items: itemsValidos });
   } catch (err) {
     await client.query('ROLLBACK');

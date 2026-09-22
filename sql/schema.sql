@@ -133,3 +133,79 @@ FROM pedidos
 WHERE estado != 'cancelado'
 GROUP BY fecha
 ORDER BY fecha DESC;
+
+-- ── CAJA ───────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS caja_sesiones (
+  id           SERIAL PRIMARY KEY,
+  usuario_id   UUID NOT NULL REFERENCES usuarios(id),
+  estado       TEXT NOT NULL DEFAULT 'abierta' CHECK (estado IN ('abierta','cerrada')),
+  fondo_inicial INT NOT NULL DEFAULT 0,           -- efectivo al abrir
+  total_efectivo INT,                             -- calculado al cerrar
+  total_online   INT,                             -- calculado al cerrar
+  total_ventas   INT,                             -- calculado al cerrar
+  notas        TEXT,
+  abierta_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  cerrada_at   TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS caja_movimientos (
+  id           SERIAL PRIMARY KEY,
+  sesion_id    INT NOT NULL REFERENCES caja_sesiones(id),
+  tipo         TEXT NOT NULL CHECK (tipo IN ('ingreso','egreso')),
+  concepto     TEXT NOT NULL,
+  monto        INT NOT NULL CHECK (monto > 0),
+  pedido_id    INT REFERENCES pedidos(id),        -- NULL si es mov. manual
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_caja_sesiones_estado ON caja_sesiones(estado);
+CREATE INDEX IF NOT EXISTS idx_caja_mov_sesion      ON caja_movimientos(sesion_id);
+
+-- ── STOCK ──────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS insumos (
+  id           SERIAL PRIMARY KEY,
+  nombre       TEXT NOT NULL UNIQUE,
+  unidad       TEXT NOT NULL,                     -- kg, litros, unidades, etc.
+  stock_actual NUMERIC(10,2) NOT NULL DEFAULT 0,
+  stock_minimo NUMERIC(10,2) NOT NULL DEFAULT 0,  -- alerta si cae debajo
+  activo       BOOLEAN NOT NULL DEFAULT true,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TRIGGER insumos_updated_at
+  BEFORE UPDATE ON insumos
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS stock_movimientos (
+  id          SERIAL PRIMARY KEY,
+  insumo_id   INT  NOT NULL REFERENCES insumos(id),
+  tipo        TEXT NOT NULL CHECK (tipo IN ('entrada','salida','ajuste')),
+  cantidad    NUMERIC(10,2) NOT NULL,
+  motivo      TEXT,
+  usuario_id  UUID REFERENCES usuarios(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Insumos base para Burger Must
+INSERT INTO insumos (nombre, unidad, stock_actual, stock_minimo) VALUES
+  ('Carne Wagyu',         'kg',       10,   2),
+  ('Pan de hamburguesa',  'unidades', 100,  20),
+  ('Queso cheddar',       'kg',       5,    1),
+  ('Bacon',               'kg',       3,    0.5),
+  ('Lechuga',             'kg',       2,    0.5),
+  ('Tomate',              'kg',       3,    0.5),
+  ('Cebolla',             'kg',       4,    1),
+  ('Papas',               'kg',       20,   5),
+  ('Aceite',              'litros',   10,   2),
+  ('Coca Cola',           'unidades', 50,   12),
+  ('Agua mineral',        'unidades', 48,   12),
+  ('Soda Estambul',       'unidades', 36,   12)
+ON CONFLICT (nombre) DO NOTHING;
+
+-- Vista: insumos con stock bajo mínimo
+CREATE OR REPLACE VIEW v_stock_critico AS
+SELECT id, nombre, unidad, stock_actual, stock_minimo,
+       (stock_minimo - stock_actual) AS faltante
+FROM insumos
+WHERE activo = true AND stock_actual < stock_minimo
+ORDER BY faltante DESC;

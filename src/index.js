@@ -7,6 +7,8 @@ import menuRoutes     from './routes/menu.routes.js';
 import pedidosRoutes  from './routes/pedidos.routes.js';
 import pagosRoutes    from './routes/pagos.routes.js';
 import finanzasRoutes from './routes/finanzas.routes.js';
+import cajaRoutes     from './routes/caja.routes.js';
+import stockRoutes    from './routes/stock.routes.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -25,11 +27,7 @@ app.use('/api/pagos/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 // ── HEALTH CHECK ────────────────────────────────────────────────────────────
-app.get('/health', async (_, res) => {
-  const { default: bistrosoft } = await import('./services/bistrosoft.js');
-  const bistro = await bistrosoft.healthCheck();
-  res.json({ ok: true, ts: new Date().toISOString(), bistrosoft: bistro });
-});
+app.get('/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
 // ── RUTAS ───────────────────────────────────────────────────────────────────
 app.use('/api/auth',     authRoutes);
@@ -37,6 +35,8 @@ app.use('/api/menu',     menuRoutes);
 app.use('/api/pedidos',  pedidosRoutes);
 app.use('/api/pagos',    pagosRoutes);
 app.use('/api/finanzas', finanzasRoutes);
+app.use('/api/caja',     cajaRoutes);
+app.use('/api/stock',    stockRoutes);
 
 // ── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
