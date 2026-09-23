@@ -224,3 +224,18 @@ ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mp_point_intent_id TEXT;
 ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_estado_check;
 ALTER TABLE pedidos ADD CONSTRAINT pedidos_estado_check
   CHECK (estado IN ('pendiente_caja','nuevo','en preparación','listo','entregado','cancelado'));
+
+-- ── INTEGRACIONES DELIVERY ─────────────────────────────────────────────────
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS origen    TEXT NOT NULL DEFAULT 'web';
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS origen_id TEXT;
+
+CREATE TABLE IF NOT EXISTS pedido_integraciones (
+  id          SERIAL PRIMARY KEY,
+  pedido_id   INT  NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+  origen      TEXT NOT NULL,  -- 'caja' | 'web' | 'rappi' | 'pedidosya' | 'mercadolibre' | 'ifood'
+  origen_id   TEXT,           -- ID del pedido en la plataforma externa
+  payload_raw JSONB,          -- payload original para auditoría y debug
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_integraciones_pedido ON pedido_integraciones(pedido_id);
+CREATE INDEX IF NOT EXISTS idx_integraciones_origen ON pedido_integraciones(origen, origen_id);

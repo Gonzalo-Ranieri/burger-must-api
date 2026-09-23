@@ -52,10 +52,11 @@ export async function createPedido(req, res) {
     }
 
     const numero = generarNumero();
+    const origen = req.body.origen ?? 'web';
     const { rows: [pedido] } = await client.query(`
       INSERT INTO pedidos
-        (numero, usuario_id, nombre_cliente, modo_entrega, modo_pago, total, notas, estado)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        (numero, usuario_id, nombre_cliente, modo_entrega, modo_pago, total, notas, estado, origen)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       RETURNING *`,
       [
         numero,
@@ -66,6 +67,7 @@ export async function createPedido(req, res) {
         total,
         notas ?? null,
         estadoInicial(),
+        origen,
       ]
     );
 
@@ -200,5 +202,83 @@ export async function confirmarPagoCaja(req, res) {
   } catch (err) {
     console.error('[pedidos/confirmarCaja]', err.message);
     res.status(500).json({ error: 'Error interno' });
+  }
+}
+
+// POST /api/pedidos/caja
+// El cajero crea y confirma el pedido en un solo paso.
+// Si el pago es efectivo o posnet-confirmado, el pedido va directo a cocina.
+export async function createPedidoCaja(req, res) {
+  const { items, modo_entrega, modo_pago, nombre_cliente, notas, cobrado } = req.body;
+
+  if (!items?.length) return res.status(400).json({ error: 'El pedido debe tener al menos un item' });
+  if (!['efectivo','posnet','online'].includes(modo_pago)) return res.status(400).json({ error: 'modo_pago inválido' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const ids = items.map(i => i.producto_id);
+    const { rows: prods } = await client.query(
+      'SELECT id, nombre, precio, activo FROM productos WHERE id = ANY($1)', [ids]
+    );
+    const prodMap = Object.fromEntries(prods.map(p => [p.id, p]));
+
+    let total = 0;
+    const itemsValidos = [];
+    for (const item of items) {
+      const prod = prodMap[item.producto_id];
+      if (!prod || !prod.activo) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `Producto ${item.producto_id} no disponible` });
+      }
+      const subtotal = prod.precio * item.cantidad;
+      total += subtotal;
+      itemsValidos.push({ ...item, nombre: prod.nombre, precio_unit: prod.precio, subtotal });
+    }
+
+    // Si el cajero marca como cobrado (efectivo/posnet confirmado), va directo a "nuevo" (cocina)
+    // Si elige online, queda pendiente hasta que MP confirme
+    // Si posnet no confirmado aún, queda pendiente
+    const estadoPedido = (cobrado === true && modo_pago !== 'online') ? 'nuevo' : 'pendiente_caja';
+    const mpStatus     = cobrado === true ? 'approved' : null;
+
+    const numero = generarNumero();
+    const { rows: [pedido] } = await client.query(`
+      INSERT INTO pedidos
+        (numero, usuario_id, nombre_cliente, modo_entrega, modo_pago,
+         total, notas, estado, mp_status, origen)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'caja')
+      RETURNING *`,
+      [
+        numero,
+        req.user?.id ?? null,
+        nombre_cliente ?? null,
+        modo_entrega ?? 'takeaway',
+        modo_pago,
+        total,
+        notas ?? null,
+        estadoPedido,
+        mpStatus,
+      ]
+    );
+
+    for (const item of itemsValidos) {
+      await client.query(`
+        INSERT INTO pedido_items
+          (pedido_id, producto_id, nombre, precio_unit, cantidad, subtotal)
+        VALUES ($1,$2,$3,$4,$5,$6)`,
+        [pedido.id, item.producto_id, item.nombre, item.precio_unit, item.cantidad, item.subtotal]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ ...pedido, items: itemsValidos });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[pedidos/caja]', err.message);
+    res.status(500).json({ error: 'Error interno' });
+  } finally {
+    client.release();
   }
 }

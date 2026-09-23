@@ -7,9 +7,10 @@ import menuRoutes     from './routes/menu.routes.js';
 import pedidosRoutes  from './routes/pedidos.routes.js';
 import pagosRoutes    from './routes/pagos.routes.js';
 import finanzasRoutes from './routes/finanzas.routes.js';
-import cajaRoutes     from './routes/caja.routes.js';
-import stockRoutes    from './routes/stock.routes.js';
-import pointRoutes    from './routes/point.routes.js';
+import cajaRoutes          from './routes/caja.routes.js';
+import stockRoutes         from './routes/stock.routes.js';
+import pointRoutes         from './routes/point.routes.js';
+import integracionesRoutes from './routes/integraciones.routes.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -36,9 +37,10 @@ app.use('/api/menu',     menuRoutes);
 app.use('/api/pedidos',  pedidosRoutes);
 app.use('/api/pagos',    pagosRoutes);
 app.use('/api/finanzas', finanzasRoutes);
-app.use('/api/caja',     cajaRoutes);
-app.use('/api/stock',    stockRoutes);
-app.use('/api/point',    pointRoutes);
+app.use('/api/caja',          cajaRoutes);
+app.use('/api/stock',         stockRoutes);
+app.use('/api/point',         pointRoutes);
+app.use('/api/integraciones', integracionesRoutes);
 
 // ── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
