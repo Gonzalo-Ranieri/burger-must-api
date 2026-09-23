@@ -51,6 +51,6 @@ app.use((err, _, res, __) => {
   res.status(500).json({ error: 'Error interno del servidor' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`[server] Burger Must API corriendo en puerto ${PORT}`);
 });
