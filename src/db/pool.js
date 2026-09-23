@@ -6,7 +6,7 @@ const { Pool } = pg;
 
 // Soporte para connection string completa O variables separadas
 // Las variables separadas evitan problemas con caracteres especiales en la contraseña
-const pool = process.env.DATABASE_URL
+const pool = process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('postgresql')
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
