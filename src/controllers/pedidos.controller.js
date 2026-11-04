@@ -26,6 +26,9 @@ export async function createPedido(req, res) {
   if (!['efectivo','posnet','online'].includes(modo_pago)) {
     return res.status(400).json({ error: 'modo_pago inválido' });
   }
+  if (!items.every(i => Number.isInteger(i.cantidad) && i.cantidad > 0)) {
+    return res.status(400).json({ error: 'cantidad inválida en uno o más items' });
+  }
 
   const client = await pool.connect();
   try {
@@ -213,6 +216,9 @@ export async function createPedidoCaja(req, res) {
 
   if (!items?.length) return res.status(400).json({ error: 'El pedido debe tener al menos un item' });
   if (!['efectivo','posnet','online'].includes(modo_pago)) return res.status(400).json({ error: 'modo_pago inválido' });
+  if (!items.every(i => Number.isInteger(i.cantidad) && i.cantidad > 0)) {
+    return res.status(400).json({ error: 'cantidad inválida en uno o más items' });
+  }
 
   const client = await pool.connect();
   try {

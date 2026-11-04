@@ -1,8 +1,40 @@
+import crypto from 'crypto';
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 import pool from '../db/pool.js';
 
 function getMP() {
   return new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
+}
+
+// Verifica la firma del webhook de MercadoPago (header x-signature).
+// https://www.mercadopago.com.ar/developers/es/docs/your-integrations/notifications/webhooks#bookmark_verificar_el_origen_de_una_notificaci.C3.B3n
+function verifyMpSignature(req, dataId) {
+  const secret = process.env.MP_WEBHOOK_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[webhook] MP_WEBHOOK_SECRET no configurado — rechazando notificación en producción');
+      return false;
+    }
+    console.warn('[webhook] MP_WEBHOOK_SECRET no configurado — firma sin verificar (solo permitido fuera de producción)');
+    return true;
+  }
+
+  const signatureHeader = req.headers['x-signature'];
+  const requestId = req.headers['x-request-id'];
+  if (!signatureHeader || !dataId) return false;
+
+  const parts = Object.fromEntries(
+    signatureHeader.split(',').map(p => p.trim().split('=').map(s => s.trim()))
+  );
+  const { ts, v1 } = parts;
+  if (!ts || !v1) return false;
+
+  const manifest = `id:${dataId};request-id:${requestId ?? ''};ts:${ts};`;
+  const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
+
+  const a = Buffer.from(expected, 'utf8');
+  const b = Buffer.from(v1, 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 // POST /api/pagos/preference  — checkout online
@@ -61,10 +93,25 @@ export async function createPreference(req, res) {
 
 // POST /api/pagos/webhook
 // Recibe notificaciones de MP para pagos online Y cobros con Point.
+// El body llega como Buffer crudo (ver express.raw en index.js) para poder
+// verificar la firma antes de parsearlo.
 export async function webhook(req, res) {
-  res.sendStatus(200);  // responder inmediatamente para que MP no reintente
+  let body;
+  try {
+    body = JSON.parse(req.body.toString('utf8'));
+  } catch {
+    return res.sendStatus(400);
+  }
 
-  const { type, data, action } = req.body;
+  const { type, data, action } = body;
+  const dataId = data?.id ?? req.query['data.id'] ?? req.query.id;
+
+  if (!verifyMpSignature(req, dataId)) {
+    console.warn('[webhook] Firma inválida o ausente — notificación descartada');
+    return res.sendStatus(401);
+  }
+
+  res.sendStatus(200);  // responder inmediatamente para que MP no reintente
 
   // ── Pago online (Checkout Pro) ──────────────────────────────────────────
   if (type === 'payment') {
@@ -105,7 +152,7 @@ export async function webhook(req, res) {
   // MP envía action = "point_integration_api" o type = "point_integration_wh"
   if (type === 'point_integration_wh' || action === 'point_integration_api') {
     try {
-      const intentData = data ?? req.body;
+      const intentData = data ?? body;
 
       // El intent trae payment_id cuando está aprobado
       const paymentId  = intentData.payment_id;
@@ -134,10 +181,10 @@ export async function webhook(req, res) {
         await pool.query(
           `UPDATE pedidos
            SET mp_payment_id = $1, mp_status = $2,
-               ${nuevoEstado ? "estado = '" + nuevoEstado + "'," : ""}
+               estado = COALESCE($3, estado),
                mp_point_intent_id = NULL
-           WHERE id = $3`,
-          [String(paymentId), mp_status, pedido.id]
+           WHERE id = $4`,
+          [String(paymentId), mp_status, nuevoEstado, pedido.id]
         );
       } else if (status === 'CANCELED' || status === 'ERROR') {
         await pool.query(
