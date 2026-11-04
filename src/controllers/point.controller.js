@@ -14,6 +14,7 @@
  *   MP_POINT_DEVICE_ID — ID del dispositivo Point Plus (se obtiene con GET /dispositivos)
  */
 
+import logger from '../logger.js';
 import pool from '../db/pool.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
@@ -37,7 +38,7 @@ export async function getDispositivos(req, res) {
     if (!r.ok) return res.status(r.status).json({ error: data.message ?? 'Error MP' });
     res.json(data);
   } catch (err) {
-    console.error('[point/dispositivos]', err.message);
+    logger.error('[point/dispositivos]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }
@@ -91,7 +92,7 @@ export async function cobrarConPoint(req, res) {
     );
     const data = await r.json();
     if (!r.ok) {
-      console.error('[point/cobrar] MP error:', JSON.stringify(data));
+      logger.error('[point/cobrar] MP error:', JSON.stringify(data));
       return res.status(r.status).json({ error: data.message ?? 'Error al crear intent en Point' });
     }
 
@@ -107,7 +108,7 @@ export async function cobrarConPoint(req, res) {
       mensaje:    'El monto fue enviado al Point Plus. Esperando pago del cliente.',
     });
   } catch (err) {
-    console.error('[point/cobrar]', err.message);
+    logger.error('[point/cobrar]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }
@@ -142,7 +143,7 @@ export async function cancelarIntent(req, res) {
     );
     res.json({ ok: true, mensaje: 'Intent cancelado en el Point' });
   } catch (err) {
-    console.error('[point/cancelar]', err.message);
+    logger.error('[point/cancelar]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }

@@ -15,13 +15,12 @@ CREATE TABLE IF NOT EXISTS usuarios (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Usuario admin inicial (password: admin1234 — cambiar en producción)
-INSERT INTO usuarios (nombre, email, password, rol) VALUES
-  ('Administrador', 'admin@burgermust.com',
-   '$2a$10$xK5G1QoZ3VQ7pZ2vR8mHdeKXqL9N2cY1oP0tU3wE4iF6jG7hI8kL2', 'admin'),
-  ('Cocina',        'cocina@burgermust.com',
-   '$2a$10$xK5G1QoZ3VQ7pZ2vR8mHdeKXqL9N2cY1oP0tU3wE4iF6jG7hI8kL2', 'cocina')
-ON CONFLICT (email) DO NOTHING;
+-- Los usuarios iniciales (admin, cocina) NO se seedean acá a propósito:
+-- un hash de password igual y conocido para todos los locales es un
+-- agujero de seguridad. Crealos después de correr este schema con:
+--   npm run create-admin -- admin@tudominio.com "unaPasswordLarga" admin
+--   npm run create-admin -- cocina@tudominio.com "otraPassword"    cocina
+-- Ver scripts/create-admin.js
 
 -- ── CATEGORÍAS ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS categorias (

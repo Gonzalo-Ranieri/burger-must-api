@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 import pool from '../db/pool.js';
 
 // GET /api/finanzas/resumen?fecha=2026-09-08
@@ -53,7 +54,7 @@ export async function getResumen(req, res) {
       por_hora:      porHora.rows,
     });
   } catch (err) {
-    console.error('[finanzas/resumen]', err.message);
+    logger.error('[finanzas/resumen]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }

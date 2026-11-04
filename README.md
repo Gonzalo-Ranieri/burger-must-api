@@ -85,10 +85,30 @@ npm run dev
 
 ## Base de datos
 
-Ejecutar `sql/schema.sql` en Supabase → SQL Editor.
+Primera vez: `npm run migrate` aplica `sql/migrations/0001_init.sql` (el
+mismo contenido que antes vivía solo en `sql/schema.sql`) contra
+`DATABASE_URL` y deja registro en la tabla `schema_migrations`.
+
+Cambios de esquema nuevos van en un archivo `sql/migrations/00NN_descripcion.sql`
+nuevo (nunca editar uno ya aplicado) y se corren de nuevo con `npm run migrate`
+— es idempotente, solo aplica lo que falta.
+
+Si preferís pegarlo a mano: `sql/schema.sql` sigue siendo válido en el
+SQL Editor de Supabase (ya no crea usuarios demo — ver `npm run create-admin`
+más abajo).
+
+## Crear el primer usuario admin/cocina
+
+```bash
+npm run create-admin -- admin@tudominio.com "unaPasswordLarga" admin
+npm run create-admin -- cocina@tudominio.com "otraPasswordLarga" cocina
+```
 
 ## Deploy en Railway
 
 1. Conectar este repo en railway.app
-2. Cargar las variables del `.env.example`
+2. Cargar las variables del `.env.example` (`MP_WEBHOOK_SECRET` y
+   `NODE_ENV=production` son obligatorias para producción)
 3. Railway detecta Node.js y usa `npm start` automáticamente
+4. Correr `npm run migrate` una vez (Railway → Shell, o localmente con el
+   `DATABASE_URL` de producción) antes del primer deploy

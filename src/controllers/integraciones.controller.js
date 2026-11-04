@@ -14,6 +14,8 @@
  *   7. Responde 200 inmediatamente (las apps delivery necesitan ACK rápido)
  */
 
+import crypto from 'crypto';
+import logger from '../logger.js';
 import pool from '../db/pool.js';
 import { normalizar, ORIGENES_SOPORTADOS } from '../integraciones/normalizador.js';
 
@@ -21,26 +23,45 @@ function generarNumero() {
   return `#${String(Math.floor(Math.random() * 9000) + 1000)}`;
 }
 
+// Cada plataforma de delivery se habilita seteando INTEGRACION_SECRET_<ORIGEN>
+// (ej: INTEGRACION_SECRET_RAPPI) y enviando ese valor en el header
+// x-integration-secret. Mientras no esté configurado, el webhook de ese
+// origen queda deshabilitado — no se crean pedidos sin poder verificar
+// que la notificación vino realmente de la plataforma.
+export function verificarSecretoIntegracion(origen, req) {
+  const secret = process.env[`INTEGRACION_SECRET_${origen.toUpperCase()}`];
+  if (!secret) return false;
+
+  const recibido = req.headers['x-integration-secret'];
+  if (!recibido) return false;
+
+  const a = Buffer.from(String(secret), 'utf8');
+  const b = Buffer.from(String(recibido), 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 // POST /api/integraciones/:origen/webhook
 export async function recibirWebhook(req, res) {
   const { origen } = req.params;
 
+  // Verificar que el origen está soportado
+  if (!ORIGENES_SOPORTADOS.includes(origen)) {
+    logger.warn(`[integraciones] Origen no soportado: ${origen}`);
+    return res.sendStatus(404);
+  }
+
+  if (!verificarSecretoIntegracion(origen, req)) {
+    logger.warn(`[integraciones/${origen}] Secreto ausente o inválido — webhook rechazado`);
+    return res.sendStatus(401);
+  }
+
   // Responder 200 de inmediato — las plataformas reenvían si no reciben ACK rápido
   res.sendStatus(200);
 
-  // Verificar que el origen está soportado
-  if (!ORIGENES_SOPORTADOS.includes(origen)) {
-    console.warn(`[integraciones] Origen no soportado: ${origen}`);
-    return;
-  }
-
   const payload = req.body;
-  console.log(`[integraciones/${origen}] Webhook recibido`);
+  logger.info(`[integraciones/${origen}] Webhook recibido`);
 
   try {
-    // TODO: validar firma HMAC por plataforma antes de procesar
-    // validarFirma(origen, req.headers, payload);
-
     // Normalizar al modelo interno
     const pedidoNorm = normalizar(origen, payload);
 
@@ -50,7 +71,7 @@ export async function recibirWebhook(req, res) {
       [origen, pedidoNorm.origen_id]
     );
     if (dup.length) {
-      console.log(`[integraciones/${origen}] Pedido duplicado ignorado: ${pedidoNorm.origen_id}`);
+      logger.info(`[integraciones/${origen}] Pedido duplicado ignorado: ${pedidoNorm.origen_id}`);
       return;
     }
 
@@ -140,7 +161,7 @@ export async function recibirWebhook(req, res) {
       );
 
       await client.query('COMMIT');
-      console.log(`[integraciones/${origen}] Pedido creado: ${numero} (id ${pedido.id})`);
+      logger.info(`[integraciones/${origen}] Pedido creado: ${numero} (id ${pedido.id})`);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -148,7 +169,7 @@ export async function recibirWebhook(req, res) {
       client.release();
     }
   } catch (err) {
-    console.error(`[integraciones/${origen}] Error:`, err.message);
+    logger.error(`[integraciones/${origen}] Error:`, err.message);
     // Guardar el error para debugging — no queremos perder el pedido
     try {
       await pool.query(`

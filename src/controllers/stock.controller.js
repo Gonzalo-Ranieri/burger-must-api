@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 import pool from '../db/pool.js';
 
 // GET /api/stock
@@ -78,7 +79,7 @@ export async function registrarMovimiento(req, res) {
     res.status(201).json({ insumo, movimiento: mov });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('[stock/movimiento]', err.message);
+    logger.error('[stock/movimiento]', err.message);
     res.status(500).json({ error: 'Error interno' });
   } finally {
     client.release();
