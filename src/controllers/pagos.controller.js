@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 import crypto from 'crypto';
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 import pool from '../db/pool.js';
@@ -8,14 +9,14 @@ function getMP() {
 
 // Verifica la firma del webhook de MercadoPago (header x-signature).
 // https://www.mercadopago.com.ar/developers/es/docs/your-integrations/notifications/webhooks#bookmark_verificar_el_origen_de_una_notificaci.C3.B3n
-function verifyMpSignature(req, dataId) {
+export function verifyMpSignature(req, dataId) {
   const secret = process.env.MP_WEBHOOK_SECRET;
   if (!secret) {
     if (process.env.NODE_ENV === 'production') {
-      console.error('[webhook] MP_WEBHOOK_SECRET no configurado — rechazando notificación en producción');
+      logger.error('[webhook] MP_WEBHOOK_SECRET no configurado — rechazando notificación en producción');
       return false;
     }
-    console.warn('[webhook] MP_WEBHOOK_SECRET no configurado — firma sin verificar (solo permitido fuera de producción)');
+    logger.warn('[webhook] MP_WEBHOOK_SECRET no configurado — firma sin verificar (solo permitido fuera de producción)');
     return true;
   }
 
@@ -86,7 +87,7 @@ export async function createPreference(req, res) {
 
     res.json({ preference_id: response.id, init_point: response.init_point });
   } catch (err) {
-    console.error('[pagos/preference]', err.message);
+    logger.error('[pagos/preference]', err.message);
     res.status(500).json({ error: 'Error al crear preference en MercadoPago' });
   }
 }
@@ -107,7 +108,7 @@ export async function webhook(req, res) {
   const dataId = data?.id ?? req.query['data.id'] ?? req.query.id;
 
   if (!verifyMpSignature(req, dataId)) {
-    console.warn('[webhook] Firma inválida o ausente — notificación descartada');
+    logger.warn('[webhook] Firma inválida o ausente — notificación descartada');
     return res.sendStatus(401);
   }
 
@@ -143,7 +144,7 @@ export async function webhook(req, res) {
         );
       }
     } catch (err) {
-      console.error('[webhook/payment]', err.message);
+      logger.error('[webhook/payment]', err.message);
     }
     return;
   }
@@ -195,7 +196,7 @@ export async function webhook(req, res) {
         );
       }
     } catch (err) {
-      console.error('[webhook/point]', err.message);
+      logger.error('[webhook/point]', err.message);
     }
   }
 }

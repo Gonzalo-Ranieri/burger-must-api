@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../db/pool.js';
@@ -26,7 +27,7 @@ export async function login(req, res) {
     );
     res.json({ token, rol: user.rol, nombre: user.nombre });
   } catch (err) {
-    console.error('[auth/login]', err.message);
+    logger.error('[auth/login]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }
@@ -53,7 +54,7 @@ export async function register(req, res) {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'El email ya está registrado' });
     }
-    console.error('[auth/register]', err.message);
+    logger.error('[auth/register]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }

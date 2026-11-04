@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 import pool from '../db/pool.js';
 
 // GET /api/menu  — público
@@ -14,7 +15,7 @@ export async function getMenu(req, res) {
     `);
     res.json(rows);
   } catch (err) {
-    console.error('[menu/getMenu]', err.message);
+    logger.error('[menu/getMenu]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }
@@ -52,7 +53,7 @@ export async function createProducto(req, res) {
     );
     res.status(201).json(rows[0]);
   } catch (err) {
-    console.error('[menu/create]', err.message);
+    logger.error('[menu/create]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }
@@ -92,7 +93,7 @@ export async function updateProducto(req, res) {
     if (!rows[0]) return res.status(404).json({ error: 'Producto no encontrado' });
     res.json(rows[0]);
   } catch (err) {
-    console.error('[menu/update]', err.message);
+    logger.error('[menu/update]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }

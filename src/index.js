@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 
+import logger from './logger.js';
 import pool from './db/pool.js';
 import authRoutes     from './routes/auth.routes.js';
 import menuRoutes     from './routes/menu.routes.js';
@@ -18,11 +19,11 @@ import integracionesRoutes from './routes/integraciones.routes.js';
 const REQUERIDAS = ['DATABASE_URL', 'JWT_SECRET', 'MP_ACCESS_TOKEN', 'FRONTEND_URL'];
 const faltantes = REQUERIDAS.filter(v => !process.env[v]);
 if (faltantes.length) {
-  console.error(`[server] Faltan variables de entorno requeridas: ${faltantes.join(', ')}`);
+  logger.error(`[server] Faltan variables de entorno requeridas: ${faltantes.join(', ')}`);
   process.exit(1);
 }
 if (!process.env.MP_WEBHOOK_SECRET && process.env.NODE_ENV === 'production') {
-  console.error('[server] MP_WEBHOOK_SECRET no configurado — requerido en producción para validar webhooks de MercadoPago');
+  logger.error('[server] MP_WEBHOOK_SECRET no configurado — requerido en producción para validar webhooks de MercadoPago');
   process.exit(1);
 }
 
@@ -49,7 +50,7 @@ app.get('/health', async (_, res) => {
     await pool.query('SELECT 1');
     res.json({ ok: true, db: 'up', ts: new Date().toISOString() });
   } catch (err) {
-    console.error('[health]', err.message);
+    logger.error('[health]', err.message);
     res.status(503).json({ ok: false, db: 'down', ts: new Date().toISOString() });
   }
 });
@@ -70,10 +71,10 @@ app.use((_, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
 
 // ── ERROR HANDLER ───────────────────────────────────────────────────────────
 app.use((err, _, res, __) => {
-  console.error('[server]', err.message);
+  logger.error('[server]', err.message);
   res.status(500).json({ error: 'Error interno del servidor' });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[server] Burger Must API corriendo en puerto ${PORT}`);
+  logger.info(`[server] Burger Must API corriendo en puerto ${PORT}`);
 });

@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 import pool from '../db/pool.js';
 
 // GET /api/caja/sesion-activa
@@ -15,7 +16,7 @@ export async function getSesionActiva(req, res) {
     `);
     res.json(rows[0] || null);
   } catch (err) {
-    console.error('[caja/sesionActiva]', err.message);
+    logger.error('[caja/sesionActiva]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }
@@ -38,7 +39,7 @@ export async function abrirCaja(req, res) {
     );
     res.status(201).json(rows[0]);
   } catch (err) {
-    console.error('[caja/abrir]', err.message);
+    logger.error('[caja/abrir]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }
@@ -75,7 +76,7 @@ export async function cerrarCaja(req, res) {
     );
     res.json(rows[0]);
   } catch (err) {
-    console.error('[caja/cerrar]', err.message);
+    logger.error('[caja/cerrar]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }
@@ -99,7 +100,7 @@ export async function registrarMovimiento(req, res) {
     );
     res.status(201).json(rows[0]);
   } catch (err) {
-    console.error('[caja/movimiento]', err.message);
+    logger.error('[caja/movimiento]', err.message);
     res.status(500).json({ error: 'Error interno' });
   }
 }

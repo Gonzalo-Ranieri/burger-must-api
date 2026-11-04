@@ -4,19 +4,20 @@
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import pool from '../src/db/pool.js';
+import logger from '../src/logger.js';
 
 const [, , email, password, rol = 'admin'] = process.argv;
 
 if (!email || !password) {
-  console.error('Uso: npm run create-admin -- email@dominio.com "password" [admin|cocina|cliente]');
+  logger.error('Uso: npm run create-admin -- email@dominio.com "password" [admin|cocina|cliente]');
   process.exit(1);
 }
 if (password.length < 8) {
-  console.error('La password debe tener al menos 8 caracteres');
+  logger.error('La password debe tener al menos 8 caracteres');
   process.exit(1);
 }
 if (!['admin', 'cocina', 'cliente'].includes(rol)) {
-  console.error('Rol inválido. Usar admin, cocina o cliente.');
+  logger.error('Rol inválido. Usar admin, cocina o cliente.');
   process.exit(1);
 }
 
@@ -30,9 +31,9 @@ try {
      RETURNING id, email, rol`,
     [rol === 'admin' ? 'Administrador' : rol === 'cocina' ? 'Cocina' : 'Cliente', email.toLowerCase().trim(), hash, rol]
   );
-  console.log('Usuario listo:', rows[0]);
+  logger.info('Usuario listo:', rows[0]);
 } catch (err) {
-  console.error('Error creando usuario:', err.message);
+  logger.error('Error creando usuario:', err.message);
   process.exitCode = 1;
 } finally {
   await pool.end();

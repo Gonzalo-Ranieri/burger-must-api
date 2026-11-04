@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 import pg from 'pg';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -25,7 +26,7 @@ const pool = process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('po
     });
 
 pool.on('error', (err) => {
-  console.error('[DB] Error inesperado en el pool:', err.message);
+  logger.error('[DB] Error inesperado en el pool:', err.message);
 });
 
 export default pool;
